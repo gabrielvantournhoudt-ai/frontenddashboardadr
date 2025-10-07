@@ -1338,6 +1338,40 @@
     tvWidgetLoaded = true;
   }
 
+  // ==================== FEEDBACK HÁPTICO (VIBRAÇÃO) ====================
+  
+  /**
+   * Trigger haptic feedback (vibração) para iPhone e Android
+   * @param {string} intensity - 'light', 'medium', 'heavy'
+   */
+  function triggerHapticFeedback(intensity = 'medium') {
+    try {
+      // Verificar se o navegador suporta vibração
+      if (!navigator.vibrate) {
+        console.log('⚠️ Vibração não suportada neste dispositivo');
+        return;
+      }
+
+      // Padrões de vibração por intensidade
+      const patterns = {
+        light: [10],           // Vibração leve (10ms)
+        medium: [20],          // Vibração média (20ms)
+        heavy: [30],           // Vibração forte (30ms)
+        success: [10, 50, 10], // Padrão de sucesso
+        error: [50, 100, 50]   // Padrão de erro
+      };
+
+      const pattern = patterns[intensity] || patterns.medium;
+      
+      // Ativar vibração
+      navigator.vibrate(pattern);
+      
+      console.log(`📳 Vibração ${intensity} ativada:`, pattern);
+    } catch (error) {
+      console.warn('❌ Erro ao ativar vibração:', error);
+    }
+  }
+
   // ==================== SISTEMA DE CARDS PERSONALIZÁVEIS ====================
   
   // Função para obter dados de um ativo pelo dataKey
@@ -1583,7 +1617,19 @@
       delayOnTouchOnly: true,
       preventOnFilter: true,
       swapThreshold: 0.65,
+      onStart: function(evt) {
+        // Vibração háptica ao começar a arrastar
+        triggerHapticFeedback('medium');
+        console.log('🎯 Drag iniciado - Vibração ativada');
+      },
+      onMove: function(evt) {
+        // Vibração leve ao mover entre posições
+        triggerHapticFeedback('light');
+      },
       onEnd: function(evt) {
+        // Vibração de confirmação ao soltar
+        triggerHapticFeedback('heavy');
+        
         // Atualizar ordem dos cards
         const newOrder = [];
         const cards = grid.querySelectorAll('.market-card[data-asset-id]');
