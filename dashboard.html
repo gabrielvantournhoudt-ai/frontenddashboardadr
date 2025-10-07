@@ -1,0 +1,1042 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dashboard de Análise - Cotações em Tempo Real</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  </head>
+  <body class="night-mode">
+    <div class="container">
+      <header class="market-hero">
+        <div class="market-hero__glass">
+          <div class="market-hero__primary">
+            <span class="market-hero__eyebrow">Painel principal • Dados em tempo real</span>
+            <h1>Dashboard <span class="aurora-text">Estatísticas</span> de Mercado</h1>
+            <p class="market-hero__subtitle">Acompanhe ADRs brasileiras, commodities e indicadores globais em um painel único, responsivo e com visual tecnológico.</p>
+            <div class="market-hero__tags">
+              <span class="market-tag">ADRs brasileiras</span>
+              <span class="market-tag">Commodities</span>
+              <span class="market-tag">Índice VIX</span>
+              <span class="market-tag">Tempo real</span>
+            </div>
+          </div>
+          <aside class="market-hero__aside">
+            <div class="market-hero__cta">
+              <button id="updateQuotes" class="btn btn--primary btn--small market-hero__button"><span class="btn-icon">🔄</span><span class="btn-text">Atualizar agora</span></button>
+              <button id="configureCards" class="btn btn--secondary btn--small market-hero__button"><span class="btn-icon">⚙️</span><span class="btn-text">Configurar Cards</span></button>
+              <span class="market-hero__cta-help">Sincronize as cotações sempre que desejar informações atualizadas.</span>
+            </div>
+            <div class="market-hero__status-card">
+              <span class="market-hero__status-label">Status do feed</span>
+              <div id="quotesStatus" class="quotes-status"><span class="status-text">Pronto</span></div>
+              <span class="market-hero__time">Última atualização: <span id="lastQuoteUpdate">--:--:--</span></span>
+            </div>
+            <div class="market-hero__metrics">
+              <div class="hero-metric">
+                <span class="hero-metric__label">Cobertura</span>
+                <span class="hero-metric__value">ADRs • Commodities • VIX</span>
+              </div>
+              <div class="hero-metric">
+                <span class="hero-metric__label">Fonte de dados</span>
+                <span class="hero-metric__value">Yahoo Finance API</span>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </header>
+
+      <div class="tab-controls">
+        <button class="tab-trigger tab-trigger--active" data-tab="market">Análise de Mercado</button>
+        <button class="tab-trigger" data-tab="cards">Ativos Cadastrados / Cards</button>
+        <button class="tab-trigger" data-tab="tv">Widgets TradingView</button>
+      </div>
+
+      <section class="tab-panel tab-panel--active" data-tab-panel="market">
+        <div class="summary-widgets">
+          <div class="summary-widget" id="widget-atual">
+            <span class="summary-title">ADRs Saldo Atual</span>
+            <span class="summary-value" id="widget-atual-value">--</span>
+            <span class="summary-timestamp" id="widget-atual-timestamp">--</span>
+            <span class="summary-detail" id="widget-atual-detail">Pos: -- | Neg: --</span>
+          </div>
+          <div class="summary-widget" id="widget-fechamento">
+            <span class="summary-title">ADRs Fechamento</span>
+            <span class="summary-value" id="widget-fechamento-value">--</span>
+            <span class="summary-timestamp" id="widget-fechamento-timestamp">--</span>
+            <span class="summary-detail" id="widget-fechamento-detail">Pos: -- | Neg: --</span>
+          </div>
+          <div class="summary-widget" id="widget-after-hours">
+            <span class="summary-title">ADRs After Market</span>
+            <span class="summary-value" id="widget-afterhours-value">--</span>
+            <span class="summary-timestamp" id="widget-afterhours-timestamp">--</span>
+            <span class="summary-detail" id="widget-afterhours-detail">Pos: -- | Neg: --</span>
+          </div>
+          <div class="summary-widget" id="widget-commodities">
+            <span class="summary-title">Commodities Radar</span>
+            <span class="summary-value" id="widget-commodities-value">--</span>
+            <span class="summary-timestamp" id="widget-commodities-timestamp">--</span>
+            <span class="summary-detail" id="widget-commodities-detail">Pos: -- | Neg: --</span>
+          </div>
+        </div>
+        <div class="market-grid" id="market-grid" data-sortable="true">
+          <!-- Cards serão gerados dinamicamente pelo JavaScript -->
+        </div>
+
+        <!-- Modal de Configuração de Cards -->
+        <div id="cardsConfigModal" class="modal-overlay">
+          <div class="modal-container">
+            <div class="modal-header">
+              <h2 class="modal-title">⚙️ Configurar Cards de Ativos</h2>
+              <button class="modal-close" id="closeConfigModal">✕</button>
+            </div>
+            <div class="modal-body">
+              <div class="config-section">
+                <h3 class="config-section-title">📊 Ativos Disponíveis</h3>
+                <p class="config-section-description">Selecione os ativos que deseja visualizar no painel</p>
+                <div id="availableAssetsList" class="assets-list"></div>
+              </div>
+              <div class="config-section">
+                <h3 class="config-section-title">✓ Cards Ativos</h3>
+                <p class="config-section-description">Arraste para reordenar os cards no painel</p>
+                <div id="activeAssetsList" class="assets-list assets-list--sortable"></div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button id="resetCardsConfig" class="btn btn--secondary">🔄 Restaurar Padrão</button>
+              <button id="saveCardsConfig" class="btn btn--primary">💾 Salvar Configuração</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="market-card-templates" style="display: none;">
+          <!-- Templates dos cards para clonagem -->
+          <div class="market-card" id="market-ibov">
+            <div class="market-card__header">
+              <span class="market-card__name">Ibovespa</span>
+              <span class="market-card__subtitle" id="market-ibov-subtitle">--</span>
+              <span class="market-card__timestamp" id="market-ibov-timestamp">--</span>
+            </div>
+            <div class="market-card__value" id="market-ibov-price">--</div>
+            <div class="market-card__change" id="market-ibov-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="market-spark-ibov" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="market-spark-ibov-tooltip"></div>
+            </div>
+          </div>
+          <div class="market-card" id="market-vix">
+            <div class="market-card__header">
+              <span class="market-card__name">VIX</span>
+              <span class="market-card__subtitle" id="market-vix-subtitle">--</span>
+              <span class="market-card__timestamp" id="market-vix-timestamp">--</span>
+            </div>
+            <div class="market-card__value" id="market-vix-price">--</div>
+            <div class="market-card__change" id="market-vix-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="market-spark-vix" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="market-spark-vix-tooltip"></div>
+            </div>
+          </div>
+          <div class="market-card" id="market-sp500">
+            <div class="market-card__header">
+              <span class="market-card__name">S&P 500</span>
+              <span class="market-card__subtitle" id="market-sp500-subtitle">--</span>
+              <span class="market-card__timestamp" id="market-sp500-timestamp">--</span>
+            </div>
+            <div class="market-card__value" id="market-sp500-price">--</div>
+            <div class="market-card__change" id="market-sp500-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="market-spark-sp500" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="market-spark-sp500-tooltip"></div>
+            </div>
+          </div>
+          <div class="market-card" id="market-nasdaq">
+            <div class="market-card__header">
+              <span class="market-card__name">Nasdaq 100</span>
+              <span class="market-card__subtitle" id="market-nasdaq-subtitle">--</span>
+              <span class="market-card__timestamp" id="market-nasdaq-timestamp">--</span>
+            </div>
+            <div class="market-card__value" id="market-nasdaq-price">--</div>
+            <div class="market-card__change" id="market-nasdaq-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="market-spark-nasdaq" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="market-spark-nasdaq-tooltip"></div>
+            </div>
+          </div>
+          <div class="market-card" id="market-ewz">
+            <div class="market-card__header">
+              <span class="market-card__name">EWZ</span>
+              <span class="market-card__subtitle" id="market-ewz-subtitle">--</span>
+              <span class="market-card__timestamp" id="market-ewz-timestamp">--</span>
+            </div>
+            <div class="market-card__value" id="market-ewz-price">--</div>
+            <div class="market-card__change" id="market-ewz-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="market-spark-ewz" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="market-spark-ewz-tooltip"></div>
+            </div>
+          </div>
+          <div class="market-card" id="market-dxy">
+            <div class="market-card__header">
+              <span class="market-card__name">Dólar (DXY)</span>
+              <span class="market-card__subtitle" id="market-dxy-subtitle">--</span>
+              <span class="market-card__timestamp" id="market-dxy-timestamp">--</span>
+            </div>
+            <div class="market-card__value" id="market-dxy-price">--</div>
+            <div class="market-card__change" id="market-dxy-change">--</div>
+            <div class="market-card__insight" id="market-dxy-insight">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="market-spark-dxy" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="market-spark-dxy-tooltip"></div>
+            </div>
+          </div>
+          <div class="market-card" id="market-gold">
+            <div class="market-card__header">
+              <span class="market-card__name">Gold Futures</span>
+              <span class="market-card__subtitle" id="market-gold-subtitle">--</span>
+              <span class="market-card__timestamp" id="market-gold-timestamp">--</span>
+            </div>
+            <div class="market-card__value" id="market-gold-price">--</div>
+            <div class="market-card__change" id="market-gold-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="market-spark-gold" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="market-spark-gold-tooltip"></div>
+            </div>
+          </div>
+          <div class="market-card" id="market-iron">
+            <div class="market-card__header">
+              <span class="market-card__name">Copper (Iron Ore)</span>
+              <span class="market-card__subtitle" id="market-iron-subtitle">--</span>
+              <span class="market-card__timestamp" id="market-iron-timestamp">--</span>
+            </div>
+            <div class="market-card__value" id="market-iron-price">--</div>
+            <div class="market-card__change" id="market-iron-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="market-spark-iron" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="market-spark-iron-tooltip"></div>
+            </div>
+          </div>
+          <div class="market-card" id="market-cl">
+            <div class="market-card__header">
+              <span class="market-card__name">WTI</span>
+              <span class="market-card__subtitle" id="market-cl-subtitle">--</span>
+              <span class="market-card__timestamp" id="market-cl-timestamp">--</span>
+            </div>
+            <div class="market-card__value" id="market-cl-price">--</div>
+            <div class="market-card__change" id="market-cl-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="market-spark-cl" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="market-spark-cl-tooltip"></div>
+            </div>
+          </div>
+          <div class="market-card" id="market-bz">
+            <div class="market-card__header">
+              <span class="market-card__name">Brent</span>
+              <span class="market-card__subtitle" id="market-bz-subtitle">--</span>
+              <span class="market-card__timestamp" id="market-bz-timestamp">--</span>
+            </div>
+            <div class="market-card__value" id="market-bz-price">--</div>
+            <div class="market-card__change" id="market-bz-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="market-spark-bz" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="market-spark-bz-tooltip"></div>
+            </div>
+          </div>
+          <div class="market-card" id="market-vale">
+            <div class="market-card__header">
+              <span class="market-card__name">Vale</span>
+              <span class="market-card__subtitle" id="market-vale-subtitle">--</span>
+              <span class="market-card__timestamp" id="market-vale-timestamp">--</span>
+            </div>
+            <div class="market-card__value" id="market-vale-price">--</div>
+            <div class="market-card__change" id="market-vale-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="market-spark-vale" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="market-spark-vale-tooltip"></div>
+            </div>
+          </div>
+          <div class="market-card" id="market-itub">
+            <div class="market-card__header">
+              <span class="market-card__name">Itaú Unibanco</span>
+              <span class="market-card__subtitle" id="market-itub-subtitle">--</span>
+              <span class="market-card__timestamp" id="market-itub-timestamp">--</span>
+            </div>
+            <div class="market-card__value" id="market-itub-price">--</div>
+            <div class="market-card__change" id="market-itub-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="market-spark-itub" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="market-spark-itub-tooltip"></div>
+            </div>
+          </div>
+          <div class="market-card" id="market-pbr">
+            <div class="market-card__header">
+              <span class="market-card__name">Petrobras</span>
+              <span class="market-card__subtitle" id="market-pbr-subtitle">--</span>
+              <span class="market-card__timestamp" id="market-pbr-timestamp">--</span>
+            </div>
+            <div class="market-card__value" id="market-pbr-price">--</div>
+            <div class="market-card__change" id="market-pbr-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="market-spark-pbr" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="market-spark-pbr-tooltip"></div>
+            </div>
+          </div>
+          <div class="market-card" id="market-pbr-a">
+            <div class="market-card__header">
+              <span class="market-card__name">Petrobras Classe A</span>
+              <span class="market-card__subtitle" id="market-pbr-a-subtitle">--</span>
+              <span class="market-card__timestamp" id="market-pbr-a-timestamp">--</span>
+            </div>
+            <div class="market-card__value" id="market-pbr-a-price">--</div>
+            <div class="market-card__change" id="market-pbr-a-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="market-spark-pbr-a" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="market-spark-pbr-a-tooltip"></div>
+            </div>
+          </div>
+          <div class="market-card" id="market-bbd">
+            <div class="market-card__header">
+              <span class="market-card__name">Banco Bradesco</span>
+              <span class="market-card__subtitle" id="market-bbd-subtitle">--</span>
+              <span class="market-card__timestamp" id="market-bbd-timestamp">--</span>
+            </div>
+            <div class="market-card__value" id="market-bbd-price">--</div>
+            <div class="market-card__change" id="market-bbd-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="market-spark-bbd" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="market-spark-bbd-tooltip"></div>
+            </div>
+          </div>
+          <div class="market-card" id="market-bbdo">
+            <div class="market-card__header">
+              <span class="market-card__name">Bradesco BBDO</span>
+              <span class="market-card__subtitle" id="market-bbdo-subtitle">--</span>
+              <span class="market-card__timestamp" id="market-bbdo-timestamp">--</span>
+            </div>
+            <div class="market-card__value" id="market-bbdo-price">--</div>
+            <div class="market-card__change" id="market-bbdo-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="market-spark-bbdo" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="market-spark-bbdo-tooltip"></div>
+            </div>
+          </div>
+          <div class="market-card" id="market-bsbr">
+            <div class="market-card__header">
+              <span class="market-card__name">Santander Brasil</span>
+              <span class="market-card__subtitle" id="market-bsbr-subtitle">--</span>
+              <span class="market-card__timestamp" id="market-bsbr-timestamp">--</span>
+            </div>
+            <div class="market-card__value" id="market-bsbr-price">--</div>
+            <div class="market-card__change" id="market-bsbr-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="market-spark-bsbr" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="market-spark-bsbr-tooltip"></div>
+            </div>
+          </div>
+          <div class="market-card" id="market-bdory">
+            <div class="market-card__header">
+              <span class="market-card__name">Banco do Brasil</span>
+              <span class="market-card__subtitle" id="market-bdory-subtitle">--</span>
+              <span class="market-card__timestamp" id="market-bdory-timestamp">--</span>
+            </div>
+            <div class="market-card__value" id="market-bdory-price">--</div>
+            <div class="market-card__change" id="market-bdory-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="market-spark-bdory" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="market-spark-bdory-tooltip"></div>
+            </div>
+          </div>
+          <div class="market-card" id="market-abev">
+            <div class="market-card__header">
+              <span class="market-card__name">Ambev</span>
+              <span class="market-card__subtitle" id="market-abev-subtitle">--</span>
+              <span class="market-card__timestamp" id="market-abev-timestamp">--</span>
+            </div>
+            <div class="market-card__value" id="market-abev-price">--</div>
+            <div class="market-card__change" id="market-abev-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="market-spark-abev" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="market-spark-abev-tooltip"></div>
+            </div>
+          </div>
+          <div class="market-card" id="market-erj">
+            <div class="market-card__header">
+              <span class="market-card__name">Embraer</span>
+              <span class="market-card__subtitle" id="market-erj-subtitle">--</span>
+              <span class="market-card__timestamp" id="market-erj-timestamp">--</span>
+            </div>
+            <div class="market-card__value" id="market-erj-price">--</div>
+            <div class="market-card__change" id="market-erj-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="market-spark-erj" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="market-spark-erj-tooltip"></div>
+            </div>
+          </div>
+        </div> <!-- fim market-card-templates -->
+
+        <section class="vix-section">
+          <div class="vix-header">
+            <span class="vix-title">Índice VIX (Volatilidade)</span>
+            <span class="vix-time" id="vix-section-time">--</span>
+          </div>
+          <div class="vix-grid">
+            <div class="vix-card" id="vix-card-atual">
+              <span class="vix-card__title">VIX Atual</span>
+              <span class="vix-card__value" id="vix-card-atual-value">--</span>
+              <span class="vix-card__change" id="vix-card-atual-change">--</span>
+              <span class="vix-card__subtitle" id="vix-card-atual-region">--</span>
+              <span class="vix-card__detail" id="vix-card-atual-volatility">--</span>
+            </div>
+            <div class="vix-card" id="vix-card-fechamento">
+              <span class="vix-card__title">Valor Fechamento</span>
+              <span class="vix-card__value" id="vix-card-fechamento-value">--</span>
+              <span class="vix-card__subtitle" id="vix-card-fechamento-date">--</span>
+              <span class="vix-card__change" id="vix-card-fechamento-change">--</span>
+            </div>
+            <div class="vix-card" id="vix-card-abertura">
+              <span class="vix-card__title">VIX Abertura</span>
+              <span class="vix-card__value" id="vix-card-abertura-value">--</span>
+              <span class="vix-card__subtitle" id="vix-card-abertura-date">--</span>
+              <span class="vix-card__change" id="vix-card-abertura-change">--</span>
+              <span class="vix-card__detail" id="vix-card-abertura-trend">--</span>
+            </div>
+          </div>
+          <canvas class="vix-chart" id="vix-chart"></canvas>
+          <div class="vix-trend" id="vix-trend">--</div>
+        </section>
+
+        <section class="dual-table-grid">
+          <div class="table-card">
+            <div class="table-card__header">
+              <span class="table-card__title">ADRs Brasileiras</span>
+              <span class="table-card__subtitle" id="table-adrs-time">--</span>
+            </div>
+            <div class="table-wrapper">
+              <table class="table-card__table">
+                <thead>
+                  <tr>
+                    <th>ADR</th>
+                    <th>Horário</th>
+                    <th>Valor</th>
+                    <th>Variação</th>
+                    <th>Valor Fechamento</th>
+                    <th>After Market</th>
+                  </tr>
+                </thead>
+                <tbody id="table-adrs-body"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="table-card">
+            <div class="table-card__header">
+              <span class="table-card__title">Commodities</span>
+              <span class="table-card__subtitle" id="table-commodities-time">--</span>
+            </div>
+            <div class="table-wrapper">
+              <table class="table-card__table">
+                <thead>
+                  <tr>
+                    <th>Ativo</th>
+                    <th>Horário</th>
+                    <th>Valor</th>
+                    <th>Variação</th>
+                  </tr>
+                </thead>
+                <tbody id="table-commodities-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="tab-panel" data-tab-panel="tv">
+        <div class="tv-widgets-grid">
+          <div class="tv-widget-card" data-tv-symbol="NYSE:VALE" data-tv-title="Vale - NYSE">
+            <div class="tv-widget-card__header">
+              <span class="tv-widget-card__title">Vale - NYSE</span>
+              <span class="tv-widget-card__subtitle">ADR • Pré e Pós-Mercado</span>
+            </div>
+            <div class="tv-widget-card__body">
+              <div class="tradingview-widget-container">
+                <div class="tradingview-widget-copyright">
+                  <a href="https://www.tradingview.com" rel="noopener nofollow" target="_blank">Powered by TradingView</a>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="tv-widget-card" data-tv-symbol="NYSE:PBR" data-tv-title="PBR - Petrobras">
+            <div class="tv-widget-card__header">
+              <span class="tv-widget-card__title">PBR - Petrobras</span>
+              <span class="tv-widget-card__subtitle">ADR • Pré e Pós-Mercado</span>
+            </div>
+            <div class="tv-widget-card__body">
+              <div class="tradingview-widget-container">
+                <div class="tradingview-widget-copyright">
+                  <a href="https://www.tradingview.com" rel="noopener nofollow" target="_blank">Powered by TradingView</a>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="tv-widget-card" data-tv-symbol="NYSE:PBR.A" data-tv-title="PBR.A - Petrobras Classe A">
+            <div class="tv-widget-card__header">
+              <span class="tv-widget-card__title">PBR.A - Petrobras Classe A</span>
+              <span class="tv-widget-card__subtitle">ADR • Pré e Pós-Mercado</span>
+            </div>
+            <div class="tv-widget-card__body">
+              <div class="tradingview-widget-container">
+                <div class="tradingview-widget-copyright">
+                  <a href="https://www.tradingview.com" rel="noopener nofollow" target="_blank">Powered by TradingView</a>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="tv-widget-card" data-tv-symbol="NYSE:ITUB" data-tv-title="ITUB - Itaú Unibanco">
+            <div class="tv-widget-card__header">
+              <span class="tv-widget-card__title">ITUB - Itaú Unibanco</span>
+              <span class="tv-widget-card__subtitle">ADR • Pré e Pós-Mercado</span>
+            </div>
+            <div class="tv-widget-card__body">
+              <div class="tradingview-widget-container">
+                <div class="tradingview-widget-copyright">
+                  <a href="https://www.tradingview.com" rel="noopener nofollow" target="_blank">Powered by TradingView</a>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="tv-widget-card" data-tv-symbol="NYSE:BBD" data-tv-title="BBD - Banco Bradesco">
+            <div class="tv-widget-card__header">
+              <span class="tv-widget-card__title">BBD - Banco Bradesco</span>
+              <span class="tv-widget-card__subtitle">ADR • Pré e Pós-Mercado</span>
+            </div>
+            <div class="tv-widget-card__body">
+              <div class="tradingview-widget-container">
+                <div class="tradingview-widget-copyright">
+                  <a href="https://www.tradingview.com" rel="noopener nofollow" target="_blank">Powered by TradingView</a>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="tv-widget-card" data-tv-symbol="NYSE:BBDO" data-tv-title="BBDO - Banco Bradesco">
+            <div class="tv-widget-card__header">
+              <span class="tv-widget-card__title">BBDO - Banco Bradesco</span>
+              <span class="tv-widget-card__subtitle">ADR • Pré e Pós-Mercado</span>
+            </div>
+            <div class="tv-widget-card__body">
+              <div class="tradingview-widget-container">
+                <div class="tradingview-widget-copyright">
+                  <a href="https://www.tradingview.com" rel="noopener nofollow" target="_blank">Powered by TradingView</a>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="tv-widget-card" data-tv-symbol="NYSE:BSBR" data-tv-title="BSBR - Santander Brasil">
+            <div class="tv-widget-card__header">
+              <span class="tv-widget-card__title">BSBR - Santander Brasil</span>
+              <span class="tv-widget-card__subtitle">ADR • Pré e Pós-Mercado</span>
+            </div>
+            <div class="tv-widget-card__body">
+              <div class="tradingview-widget-container">
+                <div class="tradingview-widget-copyright">
+                  <a href="https://www.tradingview.com" rel="noopener nofollow" target="_blank">Powered by TradingView</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="tv-widgets-grid tv-widgets-grid--charts">
+          <div class="tv-widget-card tv-widget-card--wide">
+            <div class="tv-widget-card__header">
+              <span class="tv-widget-card__title">Análise de Correlação: WIN x ADRs Brasileiras</span>
+              <span class="tv-widget-card__subtitle">Contratos futuros do índice Bovespa x ADRs principais</span>
+            </div>
+            <div class="tv-widget-card__body">
+              <div class="tradingview-widget-container">
+                <div class="tradingview-widget-container__widget"></div>
+                <div class="tradingview-widgetopyright"><a href="https://www.tradingview.com/symbols/BMFBOVESPA-IBOV/" rel="noopener nofollow" target="_blank"><span class="blue-text">IBOV chart</span></a><span class="trademark"> by TradingView</span></div>
+                <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
+                {
+                  "allow_symbol_change": true,
+                  "calendar": false,
+                  "details": false,
+                  "hide_side_toolbar": true,
+                  "hide_top_toolbar": false,
+                  "hide_legend": false,
+                  "hide_volume": false,
+                  "hotlist": false,
+                  "interval": "15",
+                  "locale": "en",
+                  "save_image": true,
+                  "style": "3",
+                  "symbol": "BMFBOVESPA:IBOV",
+                  "theme": "dark",
+                  "timezone": "Etc/UTC",
+                  "backgroundColor": "#0F0F0F",
+                  "gridColor": "rgba(242, 242, 242, 0.06)",
+                  "watchlist": [],
+                  "withdateranges": false,
+                  "compareSymbols": [
+                    {
+                      "symbol": "NYSE:PBR",
+                      "position": "SameScale"
+                    },
+                    {
+                      "symbol": "NYSE:PBR.A",
+                      "position": "SameScale"
+                    },
+                    {
+                      "symbol": "NYSE:ITUB",
+                      "position": "SameScale"
+                    },
+                    {
+                      "symbol": "NYSE:BBD",
+                      "position": "SameScale"
+                    },
+                    {
+                      "symbol": "NYSE:VALE",
+                      "position": "SameScale"
+                    }
+                  ],
+                  "studies": [
+                    "Volume@tv-basicstudies"
+                  ],
+                  "width": 980,
+                  "height": 610
+                }
+                </script>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-panel" data-tab-panel="cards">
+        <div class="quotes-widget-section">
+        <div class="quotes-header">
+          <h4>Principais Ativos</h4>
+        </div>
+        <div class="quotes-grid" id="grid-main">
+          <!-- Cards principais -->
+          <div class="quote-card" id="quote-vix">
+            <div class="quote-header">
+              <div>
+                <div class="quote-symbol">VIX</div>
+                <div class="quote-name">CBOE Volatility Index</div>
+              </div>
+              <div class="quote-meta">
+                <span class="quote-timestamp" id="vix-timestamp">--</span>
+              </div>
+            </div>
+            <div class="quote-price" id="vix-price">--</div>
+            <div class="quote-change" id="vix-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="sparkline-vix" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="sparkline-vix-tooltip"></div>
+            </div>
+            <div class="quotes-info">
+              <div class="info-item"><span class="info-label">At close</span><span class="info-value" id="vix-atclose">--</span></div>
+              <div class="info-item"><span class="info-label">After hours</span><span class="info-value" id="vix-afterhours">--</span></div>
+            </div>
+          </div>
+          <div class="quote-card" id="quote-ibov">
+            <div class="quote-header">
+              <div>
+                <div class="quote-symbol">^BVSP</div>
+                <div class="quote-name">Ibovespa</div>
+              </div>
+              <div class="quote-meta">
+                <span class="quote-timestamp" id="ibov-timestamp">--</span>
+              </div>
+            </div>
+            <div class="quote-price" id="ibov-price">--</div>
+            <div class="quote-change" id="ibov-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="sparkline-ibov" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="sparkline-ibov-tooltip"></div>
+            </div>
+            <div class="quotes-info">
+              <div class="info-item"><span class="info-label">At close</span><span class="info-value" id="ibov-atclose">--</span></div>
+              <div class="info-item"><span class="info-label">After hours</span><span class="info-value" id="ibov-afterhours">--</span></div>
+            </div>
+          </div>
+          <div class="quote-card" id="quote-vale-main">
+            <div class="quote-header">
+              <div>
+                <div class="quote-symbol">VALE</div>
+                <div class="quote-name">Vale S.A.</div>
+              </div>
+              <div class="quote-meta">
+                <span class="quote-timestamp" id="vale-main-timestamp">--</span>
+              </div>
+            </div>
+            <div class="quote-price" id="vale-main-price">--</div>
+            <div class="quote-change" id="vale-main-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="sparkline-vale-main" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="sparkline-vale-main-tooltip"></div>
+            </div>
+            <div class="quotes-info">
+              <div class="info-item"><span class="info-label">At close</span><span class="info-value" id="vale-main-atclose">--</span></div>
+              <div class="info-item"><span class="info-label">After hours</span><span class="info-value" id="vale-main-afterhours">--</span></div>
+            </div>
+          </div>
+          <div class="quote-card" id="quote-pbr-main">
+            <div class="quote-header">
+              <div>
+                <div class="quote-symbol">PBR</div>
+                <div class="quote-name">Petrobras</div>
+              </div>
+              <div class="quote-meta">
+                <span class="quote-timestamp" id="pbr-main-timestamp">--</span>
+              </div>
+            </div>
+            <div class="quote-price" id="pbr-main-price">--</div>
+            <div class="quote-change" id="pbr-main-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="sparkline-pbr-main" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="sparkline-pbr-main-tooltip"></div>
+            </div>
+            <div class="quotes-info">
+              <div class="info-item"><span class="info-label">At close</span><span class="info-value" id="pbr-main-atclose">--</span></div>
+              <div class="info-item"><span class="info-label">After hours</span><span class="info-value" id="pbr-main-afterhours">--</span></div>
+            </div>
+          </div>
+
+          <div class="quote-card" id="quote-gold">
+            <div class="quote-header">
+              <div>
+                <div class="quote-symbol">GC=F</div>
+                <div class="quote-name">Gold Futures</div>
+              </div>
+              <div class="quote-meta">
+                <span class="quote-timestamp" id="gold-timestamp">--</span>
+              </div>
+            </div>
+            <div class="quote-price" id="gold-price">--</div>
+            <div class="quote-change" id="gold-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="sparkline-gold" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="sparkline-gold-tooltip"></div>
+            </div>
+            <div class="quotes-info">
+              <div class="info-item"><span class="info-label">At close</span><span class="info-value" id="gold-atclose">--</span></div>
+              <div class="info-item"><span class="info-label">After hours</span><span class="info-value" id="gold-afterhours">--</span></div>
+            </div>
+          </div>
+
+          <div class="quote-card" id="quote-iron">
+            <div class="quote-header">
+              <div>
+                <div class="quote-symbol">HG=F</div>
+                <div class="quote-name">Copper (proxy Iron Ore)</div>
+              </div>
+              <div class="quote-meta">
+                <span class="quote-timestamp" id="iron-timestamp">--</span>
+              </div>
+            </div>
+            <div class="quote-price" id="iron-price">--</div>
+            <div class="quote-change" id="iron-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="sparkline-iron" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="sparkline-iron-tooltip"></div>
+            </div>
+            <div class="quotes-info">
+              <div class="info-item"><span class="info-label">At close</span><span class="info-value" id="iron-atclose">--</span></div>
+              <div class="info-item"><span class="info-label">After hours</span><span class="info-value" id="iron-afterhours">--</span></div>
+            </div>
+          </div>
+
+          <div class="quote-card" id="quote-sp500">
+            <div class="quote-header">
+              <div>
+                <div class="quote-symbol">S&P 500</div>
+                <div class="quote-name">US Index</div>
+              </div>
+              <div class="quote-meta">
+                <span class="quote-timestamp" id="sp500-timestamp">--</span>
+              </div>
+            </div>
+            <div class="quote-price" id="sp500-price">--</div>
+            <div class="quote-change" id="sp500-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="sparkline-sp500" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="sparkline-sp500-tooltip"></div>
+            </div>
+            <div class="quotes-info">
+              <div class="info-item"><span class="info-label">At close</span><span class="info-value" id="sp500-atclose">--</span></div>
+              <div class="info-item"><span class="info-label">After hours</span><span class="info-value" id="sp500-afterhours">--</span></div>
+            </div>
+          </div>
+
+          <div class="quote-card" id="quote-ewz">
+            <div class="quote-header">
+              <div>
+                <div class="quote-symbol">EWZ</div>
+                <div class="quote-name">Brazil ETF</div>
+              </div>
+              <div class="quote-meta">
+                <span class="quote-timestamp" id="ewz-timestamp">--</span>
+              </div>
+            </div>
+            <div class="quote-price" id="ewz-price">--</div>
+            <div class="quote-change" id="ewz-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="sparkline-ewz" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="sparkline-ewz-tooltip"></div>
+            </div>
+            <div class="quotes-info">
+              <div class="info-item"><span class="info-label">At close</span><span class="info-value" id="ewz-atclose">--</span></div>
+              <div class="info-item"><span class="info-label">After hours</span><span class="info-value" id="ewz-afterhours">--</span></div>
+            </div>
+          </div>
+
+          <div class="quote-card" id="quote-dxy">
+            <div class="quote-header">
+              <div>
+                <div class="quote-symbol">DXY</div>
+                <div class="quote-name">US Dollar Index</div>
+              </div>
+              <div class="quote-meta">
+                <span class="quote-timestamp" id="dxy-timestamp">--</span>
+              </div>
+            </div>
+            <div class="quote-price" id="dxy-price">--</div>
+            <div class="quote-change" id="dxy-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="sparkline-dxy" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="sparkline-dxy-tooltip"></div>
+            </div>
+            <div class="quotes-info">
+              <div class="info-item"><span class="info-label">At close</span><span class="info-value" id="dxy-atclose">--</span></div>
+              <div class="info-item"><span class="info-label">After hours</span><span class="info-value" id="dxy-afterhours">--</span></div>
+            </div>
+          </div>
+          <div class="quote-card" id="quote-cl">
+            <div class="quote-header">
+              <div>
+                <div class="quote-symbol">CL=F</div>
+                <div class="quote-name">Crude Oil WTI</div>
+              </div>
+              <div class="quote-meta">
+                <span class="quote-timestamp" id="cl-timestamp">--</span>
+              </div>
+            </div>
+            <div class="quote-price" id="cl-price">--</div>
+            <div class="quote-change" id="cl-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="sparkline-cl" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="sparkline-cl-tooltip"></div>
+            </div>
+            <div class="quotes-info">
+              <div class="info-item"><span class="info-label">At close</span><span class="info-value" id="cl-atclose">--</span></div>
+              <div class="info-item"><span class="info-label">After hours</span><span class="info-value" id="cl-afterhours">--</span></div>
+            </div>
+          </div>
+          <div class="quote-card" id="quote-bz">
+            <div class="quote-header">
+              <div>
+                <div class="quote-symbol">BZ=F</div>
+                <div class="quote-name">Brent Crude Oil</div>
+              </div>
+              <div class="quote-meta">
+                <span class="quote-timestamp" id="bz-timestamp">--</span>
+              </div>
+            </div>
+            <div class="quote-price" id="bz-price">--</div>
+            <div class="quote-change" id="bz-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="sparkline-bz" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="sparkline-bz-tooltip"></div>
+            </div>
+            <div class="quotes-info">
+              <div class="info-item"><span class="info-label">At close</span><span class="info-value" id="bz-atclose">--</span></div>
+              <div class="info-item"><span class="info-label">After hours</span><span class="info-value" id="bz-afterhours">--</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="quotes-header" style="margin-top:16px;">
+          <h4>ADRs Brasileiras</h4>
+        </div>
+        <div class="quotes-grid quotes-grid--adrs" id="grid-adrs">
+          <!-- ADR cards -->
+          <!-- VALE -->
+          <div class="quote-card" id="quote-vale">
+            <div class="quote-header"><div><div class="quote-symbol">VALE</div><div class="quote-name">Vale S.A.</div></div></div>
+            <div class="quote-meta">
+              <span class="quote-timestamp" id="vale-timestamp">--</span>
+            </div>
+            <div class="quote-price" id="vale-price">--</div>
+            <div class="quote-change" id="vale-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="sparkline-vale" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="sparkline-vale-tooltip"></div>
+            </div>
+            <div class="quotes-info">
+              <div class="info-item"><span class="info-label">At close</span><span class="info-value" id="vale-atclose">--</span></div>
+              <div class="info-item"><span class="info-label">After hours</span><span class="info-value" id="vale-afterhours">--</span></div>
+            </div>
+          </div>
+          <!-- ITUB -->
+          <div class="quote-card" id="quote-itub">
+            <div class="quote-header"><div><div class="quote-symbol">ITUB</div><div class="quote-name">Itaú Unibanco</div></div></div>
+            <div class="quote-meta">
+              <span class="quote-timestamp" id="itub-timestamp">--</span>
+            </div>
+            <div class="quote-price" id="itub-price">--</div>
+            <div class="quote-change" id="itub-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="sparkline-itub" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="sparkline-itub-tooltip"></div>
+            </div>
+            <div class="quotes-info">
+              <div class="info-item"><span class="info-label">At close</span><span class="info-value" id="itub-atclose">--</span></div>
+              <div class="info-item"><span class="info-label">After hours</span><span class="info-value" id="itub-afterhours">--</span></div>
+            </div>
+          </div>
+          <!-- PBR -->
+          <div class="quote-card" id="quote-pbr">
+            <div class="quote-header"><div><div class="quote-symbol">PBR</div><div class="quote-name">Petrobras</div></div></div>
+            <div class="quote-meta">
+              <span class="quote-timestamp" id="pbr-timestamp">--</span>
+            </div>
+            <div class="quote-price" id="pbr-price">--</div>
+            <div class="quote-change" id="pbr-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="sparkline-pbr" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="sparkline-pbr-tooltip"></div>
+            </div>
+            <div class="quotes-info">
+              <div class="info-item"><span class="info-label">At close</span><span class="info-value" id="pbr-atclose">--</span></div>
+              <div class="info-item"><span class="info-label">After hours</span><span class="info-value" id="pbr-afterhours">--</span></div>
+            </div>
+          </div>
+          <!-- PBR-A -->
+          <div class="quote-card" id="quote-pbr-a">
+            <div class="quote-header"><div><div class="quote-symbol">PBR-A</div><div class="quote-name">Petrobras Classe A</div></div></div>
+            <div class="quote-meta">
+              <span class="quote-timestamp" id="pbr-a-timestamp">--</span>
+            </div>
+            <div class="quote-price" id="pbr-a-price">--</div>
+            <div class="quote-change" id="pbr-a-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="sparkline-pbr-a" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="sparkline-pbr-a-tooltip"></div>
+            </div>
+            <div class="quotes-info">
+              <div class="info-item"><span class="info-label">At close</span><span class="info-value" id="pbr-a-atclose">--</span></div>
+              <div class="info-item"><span class="info-label">After hours</span><span class="info-value" id="pbr-a-afterhours">--</span></div>
+            </div>
+          </div>
+          <!-- BBD -->
+          <div class="quote-card" id="quote-bbd">
+            <div class="quote-header"><div><div class="quote-symbol">BBD</div><div class="quote-name">Banco Bradesco</div></div></div>
+            <div class="quote-meta">
+              <span class="quote-timestamp" id="bbd-timestamp">--</span>
+            </div>
+            <div class="quote-price" id="bbd-price">--</div>
+            <div class="quote-change" id="bbd-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="sparkline-bbd" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="sparkline-bbd-tooltip"></div>
+            </div>
+            <div class="quotes-info">
+              <div class="info-item"><span class="info-label">At close</span><span class="info-value" id="bbd-atclose">--</span></div>
+              <div class="info-item"><span class="info-label">After hours</span><span class="info-value" id="bbd-afterhours">--</span></div>
+            </div>
+          </div>
+          <!-- BBDO -->
+          <div class="quote-card" id="quote-bbdo">
+            <div class="quote-header"><div><div class="quote-symbol">BBDO</div><div class="quote-name">Banco Bradesco</div></div></div>
+            <div class="quote-meta">
+              <span class="quote-timestamp" id="bbdo-timestamp">--</span>
+            </div>
+            <div class="quote-price" id="bbdo-price">--</div>
+            <div class="quote-change" id="bbdo-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="sparkline-bbdo" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="sparkline-bbdo-tooltip"></div>
+            </div>
+            <div class="quotes-info">
+              <div class="info-item"><span class="info-label">At close</span><span class="info-value" id="bbdo-atclose">--</span></div>
+              <div class="info-item"><span class="info-label">After hours</span><span class="info-value" id="bbdo-afterhours">--</span></div>
+            </div>
+          </div>
+          <!-- BSBR -->
+          <div class="quote-card" id="quote-bsbr">
+            <div class="quote-header"><div><div class="quote-symbol">BSBR</div><div class="quote-name">Santander Brasil</div></div></div>
+            <div class="quote-meta">
+              <span class="quote-timestamp" id="bsbr-timestamp">--</span>
+            </div>
+            <div class="quote-price" id="bsbr-price">--</div>
+            <div class="quote-change" id="bsbr-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="sparkline-bsbr" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="sparkline-bsbr-tooltip"></div>
+            </div>
+            <div class="quotes-info">
+              <div class="info-item"><span class="info-label">At close</span><span class="info-value" id="bsbr-atclose">--</span></div>
+              <div class="info-item"><span class="info-label">After hours</span><span class="info-value" id="bsbr-afterhours">--</span></div>
+            </div>
+          </div>
+          <!-- BDORY -->
+          <div class="quote-card" id="quote-bdory">
+            <div class="quote-header"><div><div class="quote-symbol">BDORY</div><div class="quote-name">Banco do Brasil</div></div></div>
+            <div class="quote-meta">
+              <span class="quote-timestamp" id="bdory-timestamp">--</span>
+            </div>
+            <div class="quote-price" id="bdory-price">--</div>
+            <div class="quote-change" id="bdory-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="sparkline-bdory" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="sparkline-bdory-tooltip"></div>
+            </div>
+            <div class="quotes-info">
+              <div class="info-item"><span class="info-label">At close</span><span class="info-value" id="bdory-atclose">--</span></div>
+              <div class="info-item"><span class="info-label">After hours</span><span class="info-value" id="bdory-afterhours">--</span></div>
+            </div>
+          </div>
+          <!-- ABEV -->
+          <div class="quote-card" id="quote-abev">
+            <div class="quote-header"><div><div class="quote-symbol">ABEV</div><div class="quote-name">Ambev</div></div></div>
+            <div class="quote-meta">
+              <span class="quote-timestamp" id="abev-timestamp">--</span>
+            </div>
+            <div class="quote-price" id="abev-price">--</div>
+            <div class="quote-change" id="abev-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="sparkline-abev" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="sparkline-abev-tooltip"></div>
+            </div>
+            <div class="quotes-info">
+              <div class="info-item"><span class="info-label">At close</span><span class="info-value" id="abev-atclose">--</span></div>
+              <div class="info-item"><span class="info-label">After hours</span><span class="info-value" id="abev-afterhours">--</span></div>
+            </div>
+          </div>
+          <!-- ERJ -->
+          <div class="quote-card" id="quote-erj">
+            <div class="quote-header"><div><div class="quote-symbol">ERJ</div><div class="quote-name">Embraer</div></div></div>
+            <div class="quote-meta">
+              <span class="quote-timestamp" id="erj-timestamp">--</span>
+            </div>
+            <div class="quote-price" id="erj-price">--</div>
+            <div class="quote-change" id="erj-change">--</div>
+            <div class="sparkline-wrapper">
+              <canvas id="sparkline-erj" class="sparkline" height="40"></canvas>
+              <div class="sparkline-tooltip" id="sparkline-erj-tooltip"></div>
+            </div>
+            <div class="quotes-info">
+              <div class="info-item"><span class="info-label">At close</span><span class="info-value" id="erj-atclose">--</span></div>
+              <div class="info-item"><span class="info-label">After hours</span><span class="info-value" id="erj-afterhours">--</span></div>
+            </div>
+          </div>
+        </div>
+        </div>
+      </section>
+    </div>
+
+    <script src="dashboard.js"></script>
+  </body>
+  </html>
+
+
