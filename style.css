@@ -7697,30 +7697,57 @@ body.night-mode .quote-card:hover {
 @media (hover: none) and (pointer: coarse) {
   /* Dispositivos touch apenas */
   .market-grid[data-sortable="true"] .market-card {
-    touch-action: pan-y;
+    touch-action: pan-y !important;
+    user-select: none;
+    -webkit-user-select: none;
   }
 
+  /* Scroll tem prioridade - sem feedback imediato */
   .market-grid[data-sortable="true"] .market-card:active {
-    transform: scale(0.98);
-    transition: transform 0.1s ease;
+    transform: none;
+    transition: none;
   }
 
-  /* Feedback mais claro quando estiver arrastando */
+  /* Feedback APENAS quando estiver realmente arrastando (após delay) */
   .sortable-chosen {
-    opacity: 0.85 !important;
-    transform: scale(1.02) !important;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
+    opacity: 0.9 !important;
+    transform: scale(1.03) !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+    z-index: 9999 !important;
   }
 
   .sortable-ghost {
-    opacity: 0.3 !important;
-    background: rgba(59, 130, 246, 0.15) !important;
+    opacity: 0.25 !important;
+    background: rgba(59, 130, 246, 0.2) !important;
+    border: 2px dashed rgba(59, 130, 246, 0.5) !important;
   }
 
-  /* Desabilitar hover em touch devices */
+  /* Desabilitar completamente hover em touch devices */
   .market-grid[data-sortable="true"] .market-card:hover {
-    transform: none;
-    box-shadow: none;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Prevenir seleção de texto durante scroll */
+  .market-card * {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* Grid com scroll vertical otimizado */
+  .market-grid {
+    touch-action: pan-y !important;
+  }
+
+  /* Container com scroll suave */
+  body {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+
+  .container {
+    -webkit-overflow-scrolling: touch;
   }
 }
 

@@ -1577,8 +1577,12 @@
       chosenClass: 'sortable-chosen',
       dragClass: 'sortable-drag',
       forceFallback: true,
-      fallbackTolerance: 3,
-      touchStartThreshold: 5,
+      fallbackTolerance: 10,
+      touchStartThreshold: 30,
+      delay: 300,
+      delayOnTouchOnly: true,
+      preventOnFilter: true,
+      swapThreshold: 0.65,
       onEnd: function(evt) {
         // Atualizar ordem dos cards
         const newOrder = [];
