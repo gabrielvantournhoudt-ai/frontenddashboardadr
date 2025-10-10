@@ -37,18 +37,40 @@
     return wrapper.querySelector('.sparkline-tooltip');
   }
 
-  async function fetchJSON(url, timeoutMs = 8000) { // Reduzido de 20s para 8s
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const res = await fetch(url, { 
-        signal: controller.signal,
-        cache: 'no-cache' // Usar cache: 'no-cache' em vez de headers
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.json();
-    } finally {
-      clearTimeout(timeout);
+  async function fetchJSON(url, timeoutMs = 15000, retries = 3) { // Aumentado timeout e adicionado retry
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      
+      try {
+        const res = await fetch(url, { 
+          signal: controller.signal,
+          cache: 'no-cache',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+        
+        const data = await res.json();
+        clearTimeout(timeout);
+        return data;
+        
+      } catch (error) {
+        clearTimeout(timeout);
+        
+        if (attempt === retries) {
+          console.error(`❌ Falha final após ${retries} tentativas para ${url}:`, error);
+          throw error;
+        }
+        
+        console.warn(`⚠️ Tentativa ${attempt}/${retries} falhou para ${url}, tentando novamente em ${attempt * 1000}ms...`);
+        await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+      }
     }
   }
 
@@ -420,35 +442,92 @@
   let latestMarketSnapshot = null;
   let supabaseSnapshotsLoaded = false;
 
+  // Sistema de rate limiting para evitar sobrecarga
+  let requestQueue = [];
+  let isProcessingQueue = false;
+  
+  async function processRequestQueue() {
+    if (isProcessingQueue || requestQueue.length === 0) return;
+    
+    isProcessingQueue = true;
+    console.log(`🔄 Processando ${requestQueue.length} requisições em lotes...`);
+    
+    // Processar em lotes de 4 requisições por vez
+    const batchSize = 4;
+    const batches = [];
+    
+    for (let i = 0; i < requestQueue.length; i += batchSize) {
+      batches.push(requestQueue.slice(i, i + batchSize));
+    }
+    
+    for (const batch of batches) {
+      try {
+        const batchPromises = batch.map(({ url, timeout, ticker, type }) => 
+          fetchJSON(url, timeout)
+            .catch(error => {
+              console.warn(`⚠️ Falha ao carregar ${ticker}/${type}:`, error);
+              return null;
+            })
+            .then(data => ({ ticker, type, data }))
+        );
+        
+        await Promise.all(batchPromises);
+        
+        // Pequena pausa entre lotes para evitar sobrecarga
+        if (batches.indexOf(batch) < batches.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+        
+      } catch (error) {
+        console.error('❌ Erro no lote:', error);
+      }
+    }
+    
+    requestQueue = [];
+    isProcessingQueue = false;
+  }
+  
   async function loadSupabaseSnapshotsIfNeeded(){
     if (supabaseSnapshotsLoaded) return;
     
-    console.log('🔄 Carregando snapshots históricos do Supabase em paralelo...');
+    console.log('🔄 Carregando snapshots históricos do Supabase com rate limiting...');
     
     const targetTickers = ['PBR','PBR-A','ITUB','BBD','BBDO','BSBR','VALE','BDORY'];
     
-    // Criar todas as promessas para execução paralela
-    const promises = [];
-    
+    // Adicionar requisições à fila em vez de executar imediatamente
     for (const ticker of targetTickers) {
-      // Promise para closing
-      promises.push(
-        fetchJSON(`${BASE_URL}/adr-history?ticker=${ticker}&type=closing&limit=1`, 5000)
-          .catch(() => null)
-          .then(closingResp => ({ ticker, type: 'closing', data: closingResp }))
-      );
+      // Requisição para closing
+      requestQueue.push({
+        url: `${BASE_URL}/adr-history?ticker=${ticker}&type=closing&limit=1`,
+        timeout: 10000,
+        ticker,
+        type: 'closing'
+      });
       
-      // Promise para after-hours
-      promises.push(
-        fetchJSON(`${BASE_URL}/adr-history?ticker=${ticker}&type=after_hours&limit=1`, 5000)
-          .catch(() => null)
-          .then(afterResp => ({ ticker, type: 'after_hours', data: afterResp }))
-      );
+      // Requisição para after-hours
+      requestQueue.push({
+        url: `${BASE_URL}/adr-history?ticker=${ticker}&type=after_hours&limit=1`,
+        timeout: 10000,
+        ticker,
+        type: 'after_hours'
+      });
     }
     
     try {
-      // Executar todas as requisições em paralelo
-      const results = await Promise.all(promises);
+      // Processar fila de requisições com rate limiting
+      await processRequestQueue();
+      
+      // Processar resultados da fila
+      const results = [];
+      for (const request of requestQueue) {
+        try {
+          const data = await fetchJSON(request.url, request.timeout);
+          results.push({ ticker: request.ticker, type: request.type, data });
+        } catch (error) {
+          console.warn(`⚠️ Falha ao carregar ${request.ticker}/${request.type}:`, error);
+          results.push({ ticker: request.ticker, type: request.type, data: null });
+        }
+      }
       
       // Processar resultados
       results.forEach(({ ticker, type, data }) => {
@@ -477,7 +556,7 @@
       });
       
       supabaseSnapshotsLoaded = true;
-      console.log('✅ Snapshots do Supabase carregados com sucesso em paralelo');
+      console.log('✅ Snapshots do Supabase carregados com sucesso com rate limiting');
       console.log('📊 latestAdrSnapshots após carregamento:', Object.keys(latestAdrSnapshots).map(ticker => ({
         ticker,
         hasClosing: !!(latestAdrSnapshots[ticker] && latestAdrSnapshots[ticker].closing),
@@ -1313,26 +1392,37 @@
   }
 
   async function updateAll(){
+    // Prevenir múltiplas execuções simultâneas
+    if (window.isUpdating) {
+      console.log('⚠️ Atualização já em andamento, ignorando...');
+      return;
+    }
+    
+    window.isUpdating = true;
     setStatus('updating','Atualizando...');
     const startTime = performance.now();
     
     try {
-      // Carregar snapshots do Supabase em paralelo com a atualização de dados
-      const promises = [];
+      console.log('🚀 Iniciando atualização com rate limiting...');
       
-      // Carregar snapshots se necessário
+      // 1. Primeiro: Carregar snapshots do Supabase (se necessário)
       if (!supabaseSnapshotsLoaded) {
-        promises.push(loadSupabaseSnapshotsIfNeeded());
+        console.log('📥 Carregando snapshots do Supabase...');
+        await loadSupabaseSnapshotsIfNeeded();
       }
       
-      // Forçar atualização do backend e buscar dados em paralelo
-      promises.push(fetchJSON(`${BASE_URL}/update`, 6000).catch(() => null));
+      // 2. Segundo: Forçar atualização do backend
+      console.log('🔄 Forçando atualização do backend...');
+      try {
+        await fetchJSON(`${BASE_URL}/update`, 12000);
+        console.log('✅ Backend atualizado com sucesso');
+      } catch (error) {
+        console.warn('⚠️ Falha ao atualizar backend, continuando com dados em cache:', error);
+      }
       
-      // Aguardar carregamento de snapshots e atualização
-      await Promise.all(promises);
-      
-      // Buscar dados atualizados
-      const data = await fetchJSON(`${BASE_URL}/market-data`, 6000);
+      // 3. Terceiro: Buscar dados atualizados
+      console.log('📊 Buscando dados de mercado...');
+      const data = await fetchJSON(`${BASE_URL}/market-data`, 12000);
       
       if (data && data.status === 'success') {
         applyMarketData(data.data);
@@ -1342,18 +1432,39 @@
         setLastUpdate(data.timestamp || new Date().toISOString());
         console.log(`⚡ Atualização concluída em ${duration}ms`);
       } else {
-        console.error('Resposta inválida', data);
+        console.error('❌ Resposta inválida do backend:', data);
         setStatus('error','Erro nos dados');
       }
-    } catch (e){
-      console.error('Falha ao atualizar dashboard', e);
+      
+    } catch (error) {
+      console.error('❌ Falha ao atualizar dashboard:', error);
       setStatus('error','Erro de conexão');
+    } finally {
+      window.isUpdating = false;
     }
   }
 
+  // Sistema de debounce para evitar cliques múltiplos
+  let lastClickTime = 0;
+  const DEBOUNCE_DELAY = 2000; // 2 segundos entre cliques
+  
+  function debouncedUpdateAll() {
+    const now = Date.now();
+    if (now - lastClickTime < DEBOUNCE_DELAY) {
+      console.log(`⚠️ Aguarde ${Math.ceil((DEBOUNCE_DELAY - (now - lastClickTime)) / 1000)}s antes de clicar novamente`);
+      return;
+    }
+    
+    lastClickTime = now;
+    updateAll();
+  }
+  
   function bind(){
     const btn = document.getElementById('updateQuotes');
-    if (btn) btn.addEventListener('click', updateAll);
+    if (btn) {
+      btn.addEventListener('click', debouncedUpdateAll);
+      console.log('✅ Botão de atualização configurado com debounce');
+    }
 
     const triggers = document.querySelectorAll('.tab-trigger');
     const panels = document.querySelectorAll('[data-tab-panel]');
