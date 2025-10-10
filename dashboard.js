@@ -648,6 +648,9 @@
     const fechamentoCached = wrapWithDailyCache('fechamento', fechamentoRealtime, () => getLatestSnapshotTimestamp(snapshots, tickers, 'closing'));
     const afterCached = wrapWithDailyCache('afterhours', afterRealtime, () => getLatestSnapshotTimestamp(snapshots, tickers, 'after_hours'));
 
+    console.log('🔍 fechamentoRealtime:', fechamentoRealtime);
+    console.log('🔍 fechamentoCached:', fechamentoCached);
+
     const commoditiesTotals = getCommodityTotals(marketData);
 
     updateWidget('atual', atual, () => getLatestDatasetTimestamp(adrs, tickers, 'at_close', 'after_hours'));
@@ -873,6 +876,10 @@
     const cachedRaw = localStorage.getItem(key);
     const cached = cachedRaw ? JSON.parse(cachedRaw) : null;
 
+    console.log(`🔍 wrapWithDailyCache(${kind}): br.hour=${br.hour}, dayKey=${dayKey}, key=${key}`);
+    console.log(`🔍 cached:`, cached);
+    console.log(`🔍 realtimeTotals:`, realtimeTotals);
+
     // Determinar se estamos na janela de atualização
     const inWindow = withinWindowBR(kind, br, et);
 
@@ -880,23 +887,29 @@
       // FECHAMENTO: Só atualiza APÓS 17:00 BR
       // Antes das 17:00 BR: sempre retorna cache do dia anterior ou atual (se houver)
       if (br.hour < 17) {
+        console.log(`🔍 Antes das 17:00 BR - buscando cache de ontem`);
         // Antes das 17:00 BR: tentar cache de ontem primeiro
         const yesterday = new Date(br.year, br.month - 1, br.day);
         yesterday.setDate(yesterday.getDate() - 1);
         const yesterdayKey = cacheKey('fechamento', `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,'0')}-${String(yesterday.getDate()).padStart(2,'0')}`);
         const yesterdayCache = localStorage.getItem(yesterdayKey);
         
+        console.log(`🔍 yesterdayKey: ${yesterdayKey}, yesterdayCache:`, yesterdayCache);
+        
         if (yesterdayCache) {
           const parsed = JSON.parse(yesterdayCache);
+          console.log(`✅ Usando cache de ontem:`, parsed);
           return { totals: parsed.totals, timestamp: parsed.timestamp ? new Date(parsed.timestamp) : null, cached: true, source: 'yesterday' };
         }
         
         // Fallback: cache de hoje (se existir de alguma forma)
         if (cached) {
+          console.log(`✅ Usando cache de hoje:`, cached);
           return { totals: cached.totals, timestamp: cached.timestamp ? new Date(cached.timestamp) : null, cached: true, source: 'today-cached' };
         }
         
         // Sem cache: retornar null
+        console.log(`❌ Sem cache disponível - retornando null`);
         return { totals: null, timestamp: null, cached: false, source: 'no-cache' };
       }
       
