@@ -381,25 +381,76 @@
     const tooltip = getTooltipElement(canvasId);
     if (!data || !canvas || !tooltip || !data.values || data.values.length < 2) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const x = evt.clientX - rect.left;
-    const w = canvas.clientWidth || rect.width;
-    const idx = Math.round((x / w) * (data.values.length - 1));
-    const clampedIdx = Math.min(Math.max(idx, 0), data.values.length - 1);
-    const value = data.values[clampedIdx];
-    const ts = data.timestamps && data.timestamps[clampedIdx];
+    // Para VIX, tooltip simples com valor e horário
+    if (canvasId === 'vix-chart') {
+      const rect = canvas.getBoundingClientRect();
+      const x = evt.clientX - rect.left;
+      const w = canvas.clientWidth || rect.width;
+      const idx = Math.round((x / w) * (data.values.length - 1));
+      const clampedIdx = Math.min(Math.max(idx, 0), data.values.length - 1);
+      const value = data.values[clampedIdx];
+      const ts = data.timestamps && data.timestamps[clampedIdx];
+      const dtText = ts ? formatTimestamp(ts, { showSeconds: false }) : '--';
+      
+      // Usar o tooltip existente do sistema
+      const tooltip = getTooltipElement(canvasId);
+      if (tooltip) {
+        tooltip.innerHTML = `
+          <div style="text-align: center; padding: 6px;">
+            <div style="font-size: 16px; font-weight: bold; color: #f1f5f9;">${fmt(value, 2)}</div>
+            <div style="font-size: 12px; color: #94a3b8;">${dtText}</div>
+          </div>
+        `;
+        
+        // Posicionamento fixo no centro do gráfico
+        tooltip.style.left = '50%';
+        tooltip.style.top = '-45px';
+        tooltip.style.transform = 'translateX(-50%)';
+        tooltip.style.position = 'absolute';
+        tooltip.classList.add('visible');
+      }
+      
+      // Guide dot
+      const ratio = clampedIdx/(data.values.length-1);
+      drawGuideDot(canvasId, ratio);
+      return;
+    }
 
-    const dtText = ts ? formatTimestamp(ts, { showSeconds: false }) : '--';
-    tooltip.innerHTML = `<strong>${fmt(value, 2)}</strong><br><span>${dtText}</span>`;
+    // Para outros gráficos, usar lógica original
+    try {
+      const rect = canvas.getBoundingClientRect();
+      const x = evt.clientX - rect.left;
+      const w = canvas.clientWidth || rect.width;
+      const idx = Math.round((x / w) * (data.values.length - 1));
+      const clampedIdx = Math.min(Math.max(idx, 0), data.values.length - 1);
+      const value = data.values[clampedIdx];
+      const ts = data.timestamps && data.timestamps[clampedIdx];
 
-    const ratio = clampedIdx/(data.values.length-1);
-    tooltip.style.left = `${Math.max(4, Math.min(96, ratio*100))}%`;
-    tooltip.style.top = '-28px';
-    tooltip.classList.add('visible');
-    drawGuideDot(canvasId, ratio);
+      const dtText = ts ? formatTimestamp(ts, { showSeconds: false }) : '--';
+      tooltip.innerHTML = `<strong>${fmt(value, 2)}</strong><br><span>${dtText}</span>`;
+
+      const ratio = clampedIdx/(data.values.length-1);
+      tooltip.style.left = `${Math.max(4, Math.min(96, ratio*100))}%`;
+      tooltip.style.top = '-28px';
+      tooltip.classList.add('visible');
+      drawGuideDot(canvasId, ratio);
+      
+    } catch (error) {
+      console.error('Erro no tooltip:', error);
+      tooltip.classList.remove('visible');
+    }
   }
 
   function hideSparklineTooltip(canvasId){
+    // Para VIX, usar lógica padrão
+    if (canvasId === 'vix-chart') {
+      const tooltip = getTooltipElement(canvasId);
+      if (tooltip) tooltip.classList.remove('visible');
+      removeGuideDot(canvasId);
+      return;
+    }
+    
+    // Para outros gráficos, usar lógica original
     const tooltip = getTooltipElement(canvasId);
     if (tooltip) tooltip.classList.remove('visible');
     removeGuideDot(canvasId);
@@ -1173,13 +1224,30 @@
       }
     }
 
-    if (atualRegionEl) atualRegionEl.textContent = getVixRegionLabel(current);
-    if (atualVolEl) atualVolEl.textContent = getVixVolatilityLabel(change);
+    if (atualRegionEl) atualRegionEl.textContent = getVixRegionLabel(current, vixData);
+    if (atualVolEl) atualVolEl.textContent = getVixVolatilityLabel(change, vixData);
 
     const fechamentoTime = vixData.at_close && (vixData.at_close_display_time || vixData.at_close.time);
     if (fechamentoValueEl) fechamentoValueEl.textContent = vixData.at_close && vixData.at_close.price != null ? fmt(vixData.at_close.price, 2) : '--';
     if (fechamentoDateEl) {
-      fechamentoDateEl.textContent = formatTimestamp(fechamentoTime);
+      // Para o fechamento, usar data do dia anterior ou do dia atual se já passou das 17h BR
+      const nowBR = new Date();
+      const isAfter5PM = nowBR.getHours() >= 17;
+      
+      let fechamentoDate;
+      if (isAfter5PM) {
+        // Se já passou das 17h BR, usar data atual
+        fechamentoDate = new Date(nowBR);
+        fechamentoDate.setHours(17, 0, 0, 0); // Definir como 17:00
+      } else {
+        // Se ainda não passou das 17h BR, usar data anterior
+        const yesterday = new Date(nowBR);
+        yesterday.setDate(yesterday.getDate() - 1);
+        yesterday.setHours(17, 0, 0, 0); // Definir como 17:00
+        fechamentoDate = yesterday;
+      }
+      
+      fechamentoDateEl.textContent = formatTimestamp(fechamentoDate);
     }
     if (fechamentoChangeEl) {
       const ch = vixData.at_close && vixData.at_close.change_percent;
@@ -1193,7 +1261,7 @@
     if (aberturaChangeEl || aberturaTrendEl) {
       const delta = getVixDeltaFromOpen(vixData);
       if (aberturaChangeEl) aberturaChangeEl.textContent = delta != null ? `${delta >= 0 ? '+' : ''}${delta.toFixed(2)}%` : 'Sem dados';
-      if (aberturaTrendEl) aberturaTrendEl.textContent = getVixOpenTrendLabel(delta);
+      if (aberturaTrendEl) aberturaTrendEl.textContent = getVixOpenTrendLabel(vixData);
     }
 
       if (chartEl) {
@@ -1201,11 +1269,30 @@
         const seriesTs = vixData.series && vixData.series.timestamps || [];
         drawSparkline('vix-chart', seriesCloses, '#cbd5e1', seriesTs, null);
       }
-    if (trendEl) trendEl.textContent = getVixTrendLabel(current, change);
+    if (trendEl) {
+      const trendText = getVixTrendLabel(current, change, vixData);
+      trendEl.textContent = trendText;
+      
+      // Aplicar cor baseada na análise de topos e fundos
+      if (vixData.vix_peaks_trend_analysis) {
+        const analysis = vixData.vix_peaks_trend_analysis;
+        if (analysis.color === 'red') {
+          trendEl.style.color = '#ef4444'; // Vermelho para impacto negativo no IBOV
+        } else if (analysis.color === 'green') {
+          trendEl.style.color = '#22c55e'; // Verde para impacto positivo no IBOV
+        } else {
+          trendEl.style.color = '#94a3b8'; // Cinza para neutro
+        }
+      } else {
+        trendEl.style.color = '#94a3b8'; // Cor padrão
+      }
+    }
   }
 
-  function getVixRegionLabel(value){
+  function getVixRegionLabel(value, vixData){
     if (value == null) return '--';
+    
+    // Manter apenas interpretação de região de estresse, sem análises adicionais
     if (value < 15) return 'Região baixa: oportunidade com realização';
     if (value < 16) return 'Região neutra: possível indefinição';
     if (value < 21) return 'Região de estresse moderado';
@@ -1216,7 +1303,8 @@
     return 'Medo extremo elevado';
   }
 
-  function getVixVolatilityLabel(change){
+  function getVixVolatilityLabel(change, vixData){
+    // Manter apenas análise tradicional simples
     if (change == null) return 'Volatilidade indefinida';
     const abs = Math.abs(change);
     const intensity = abs >= 5 ? 'forte' : 'leve';
@@ -1230,12 +1318,39 @@
     return ((vixData.current - vixData.open_price) / vixData.open_price) * 100;
   }
 
-  function getVixOpenTrendLabel(delta){
-    if (delta == null) return '--';
-    return delta < 0 ? 'Abertura do VIX em baixa' : 'Abertura do VIX em alta';
+  function getVixOpenTrendLabel(vixData){
+    if (!vixData) return '--';
+    
+    // Usar preço de fechamento anterior e preço de abertura atual
+    const previousClose = vixData.previous_close || vixData.at_close?.price;
+    const openPrice = vixData.open_price;
+    
+    if (previousClose == null || openPrice == null) return '--';
+    
+    // Calcular variação do fechamento anterior para abertura atual
+    const openChange = ((openPrice - previousClose) / previousClose) * 100;
+    
+    if (openChange > 0) {
+      return `ABERTURA DO VIX POSITIVA (+${openChange.toFixed(2)}%)`;
+    } else if (openChange < 0) {
+      return `ABERTURA DO VIX NEGATIVA (${openChange.toFixed(2)}%)`;
+    } else {
+      return 'ABERTURA DO VIX NEUTRA (0.00%)';
+    }
   }
 
-  function getVixTrendLabel(current, change){
+  function getVixTrendLabel(current, change, vixData){
+    // Usar nova análise de topos e fundos se disponível
+    if (vixData && vixData.vix_peaks_trend_analysis && vixData.vix_peaks_trend_analysis.interpretation) {
+      return vixData.vix_peaks_trend_analysis.interpretation;
+    }
+    
+    // Fallback para análise de 15 minutos
+    if (vixData && vixData.vix_15min_analysis && vixData.vix_15min_analysis.interpretation) {
+      return vixData.vix_15min_analysis.interpretation;
+    }
+    
+    // Fallback para análise tradicional
     if (current == null || change == null) return '--';
     if (change < -5) return 'Tendência: volatilidade caindo com força';
     if (change < 0) return 'Tendência: volatilidade em queda leve';

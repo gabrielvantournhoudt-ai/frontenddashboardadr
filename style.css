@@ -3986,8 +3986,18 @@ body.night-mode .live-status-indicator.error {
   color: #ef4444;
 }
 
+.vix-chart-container {
+  position: relative;
+  display: block;
+  width: 100%;
+  margin: 16px 0;
+}
+
 .vix-chart {
-  height: 160px;
+  height: 200px;
+  width: 100%;
+  cursor: crosshair;
+  display: block;
 }
 
 .vix-trend {
@@ -4328,22 +4338,26 @@ body.night-mode .live-status-indicator.error {
   pointer-events: none;
   background: rgba(15, 23, 42, 0.95);
   color: #e2e8f0;
-  padding: 4px 8px;
+  padding: 6px 10px;
   border-radius: 6px;
   font-size: 11px;
   line-height: 1.4;
   border: 1px solid rgba(148, 163, 184, 0.3);
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.35);
-  transform: translate(-50%, -100%);
   opacity: 0;
   transition: opacity 0.1s ease;
   white-space: nowrap;
   z-index: 15;
+  min-width: 80px;
+  max-width: 150px;
+  text-align: center;
 }
 
 .sparkline-tooltip.visible {
   opacity: 1;
 }
+
+/* Tooltip específico para VIX - removido para evitar conflitos */
 
 .quote-change {
   font-size: var(--font-size-sm);
