@@ -908,6 +908,13 @@
           return { totals: cached.totals, timestamp: cached.timestamp ? new Date(cached.timestamp) : null, cached: true, source: 'today-cached' };
         }
         
+        // NOVO: Se não há cache, mas temos dados em tempo real, usar os dados de hoje
+        // (isso acontece quando carregamos snapshots do Supabase pela primeira vez)
+        if (realtimeTotals) {
+          console.log(`✅ Usando dados em tempo real (primeira vez):`, realtimeTotals);
+          return { totals: realtimeTotals, timestamp: timestampResolver ? timestampResolver() : null, cached: false, source: 'realtime' };
+        }
+        
         // Sem cache: retornar null
         console.log(`❌ Sem cache disponível - retornando null`);
         return { totals: null, timestamp: null, cached: false, source: 'no-cache' };
