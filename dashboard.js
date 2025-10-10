@@ -37,11 +37,14 @@
     return wrapper.querySelector('.sparkline-tooltip');
   }
 
-  async function fetchJSON(url, timeoutMs = 20000) {
+  async function fetchJSON(url, timeoutMs = 8000) { // Reduzido de 20s para 8s
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(url, { signal: controller.signal });
+      const res = await fetch(url, { 
+        signal: controller.signal,
+        cache: 'no-cache' // Usar cache: 'no-cache' em vez de headers
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
     } finally {
@@ -420,50 +423,65 @@
   async function loadSupabaseSnapshotsIfNeeded(){
     if (supabaseSnapshotsLoaded) return;
     
-    console.log('🔄 Carregando snapshots históricos do Supabase...');
+    console.log('🔄 Carregando snapshots históricos do Supabase em paralelo...');
     
     const targetTickers = ['PBR','PBR-A','ITUB','BBD','BBDO','BSBR','VALE','BDORY'];
     
+    // Criar todas as promessas para execução paralela
+    const promises = [];
+    
     for (const ticker of targetTickers) {
-      try {
-        // Buscar último snapshot de fechamento
-        const closingUrl = `${BASE_URL}/adr-history?ticker=${ticker}&type=closing&limit=1`;
-        const closingResp = await fetchJSON(closingUrl, 10000).catch(() => null);
-        
-        if (closingResp && closingResp.status === 'success' && closingResp.data && closingResp.data.length > 0) {
-          const lastClosing = closingResp.data[0];
-          if (!latestAdrSnapshots[ticker]) latestAdrSnapshots[ticker] = {};
-          latestAdrSnapshots[ticker].closing = {
-            price: lastClosing.price,
-            variation: lastClosing.variation,
-            time: lastClosing.source_time
-          };
-          latestAdrSnapshots[ticker].closing_source_time = lastClosing.source_time;
-          console.log(`✅ ${ticker} closing snapshot carregado do Supabase: ${lastClosing.variation}%`);
-        }
-        
-        // Buscar último snapshot de after-hours
-        const afterUrl = `${BASE_URL}/adr-history?ticker=${ticker}&type=after_hours&limit=1`;
-        const afterResp = await fetchJSON(afterUrl, 10000).catch(() => null);
-        
-        if (afterResp && afterResp.status === 'success' && afterResp.data && afterResp.data.length > 0) {
-          const lastAfter = afterResp.data[0];
-          if (!latestAdrSnapshots[ticker]) latestAdrSnapshots[ticker] = {};
-          latestAdrSnapshots[ticker].after_hours = {
-            price: lastAfter.price,
-            variation: lastAfter.variation,
-            time: lastAfter.source_time
-          };
-          latestAdrSnapshots[ticker].after_hours_source_time = lastAfter.source_time;
-          console.log(`✅ ${ticker} after-hours snapshot carregado do Supabase: ${lastAfter.variation}%`);
-        }
-      } catch (error) {
-        console.warn(`⚠️ Erro ao carregar snapshots do ${ticker}:`, error);
-      }
+      // Promise para closing
+      promises.push(
+        fetchJSON(`${BASE_URL}/adr-history?ticker=${ticker}&type=closing&limit=1`, 5000)
+          .catch(() => null)
+          .then(closingResp => ({ ticker, type: 'closing', data: closingResp }))
+      );
+      
+      // Promise para after-hours
+      promises.push(
+        fetchJSON(`${BASE_URL}/adr-history?ticker=${ticker}&type=after_hours&limit=1`, 5000)
+          .catch(() => null)
+          .then(afterResp => ({ ticker, type: 'after_hours', data: afterResp }))
+      );
     }
     
-    supabaseSnapshotsLoaded = true;
-    console.log('✅ Snapshots do Supabase carregados com sucesso');
+    try {
+      // Executar todas as requisições em paralelo
+      const results = await Promise.all(promises);
+      
+      // Processar resultados
+      results.forEach(({ ticker, type, data }) => {
+        if (!data || data.status !== 'success' || !data.data || data.data.length === 0) return;
+        
+        const snapshot = data.data[0];
+        if (!latestAdrSnapshots[ticker]) latestAdrSnapshots[ticker] = {};
+        
+        if (type === 'closing') {
+          latestAdrSnapshots[ticker].closing = {
+            price: snapshot.price,
+            variation: snapshot.variation,
+            time: snapshot.source_time
+          };
+          latestAdrSnapshots[ticker].closing_source_time = snapshot.source_time;
+          console.log(`✅ ${ticker} closing snapshot carregado: ${snapshot.variation}%`);
+        } else if (type === 'after_hours') {
+          latestAdrSnapshots[ticker].after_hours = {
+            price: snapshot.price,
+            variation: snapshot.variation,
+            time: snapshot.source_time
+          };
+          latestAdrSnapshots[ticker].after_hours_source_time = snapshot.source_time;
+          console.log(`✅ ${ticker} after-hours snapshot carregado: ${snapshot.variation}%`);
+        }
+      });
+      
+      supabaseSnapshotsLoaded = true;
+      console.log('✅ Snapshots do Supabase carregados com sucesso em paralelo');
+    } catch (error) {
+      console.warn('⚠️ Erro ao carregar snapshots do Supabase:', error);
+      supabaseSnapshotsLoaded = true; // Marcar como carregado para evitar tentativas repetidas
+    }
   }
 
   function applyMarketData(data){
@@ -1259,18 +1277,33 @@
 
   async function updateAll(){
     setStatus('updating','Atualizando...');
+    const startTime = performance.now();
+    
     try {
-      // Carregar snapshots do Supabase na primeira execução
+      // Carregar snapshots do Supabase em paralelo com a atualização de dados
+      const promises = [];
+      
+      // Carregar snapshots se necessário
       if (!supabaseSnapshotsLoaded) {
-        await loadSupabaseSnapshotsIfNeeded();
+        promises.push(loadSupabaseSnapshotsIfNeeded());
       }
       
-      await fetchJSON(`${BASE_URL}/update`, 20000).catch(()=>{});
-      const data = await fetchJSON(`${BASE_URL}/market-data`, 20000);
+      // Forçar atualização do backend e buscar dados em paralelo
+      promises.push(fetchJSON(`${BASE_URL}/update`, 6000).catch(() => null));
+      
+      // Aguardar carregamento de snapshots e atualização
+      await Promise.all(promises);
+      
+      // Buscar dados atualizados
+      const data = await fetchJSON(`${BASE_URL}/market-data`, 6000);
+      
       if (data && data.status === 'success') {
         applyMarketData(data.data);
-        setStatus('success','Atualizado com sucesso');
+        const endTime = performance.now();
+        const duration = Math.round(endTime - startTime);
+        setStatus('success',`Atualizado em ${duration}ms`);
         setLastUpdate(data.timestamp || new Date().toISOString());
+        console.log(`⚡ Atualização concluída em ${duration}ms`);
       } else {
         console.error('Resposta inválida', data);
         setStatus('error','Erro nos dados');
