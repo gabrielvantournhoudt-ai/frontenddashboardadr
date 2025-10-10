@@ -464,7 +464,7 @@
             time: snapshot.source_time
           };
           latestAdrSnapshots[ticker].closing_source_time = snapshot.source_time;
-          console.log(`✅ ${ticker} closing snapshot carregado: ${snapshot.variation}%`);
+          console.log(`✅ ${ticker} closing snapshot carregado: ${snapshot.variation}% (time: ${snapshot.source_time})`);
         } else if (type === 'after_hours') {
           latestAdrSnapshots[ticker].after_hours = {
             price: snapshot.price,
@@ -478,6 +478,11 @@
       
       supabaseSnapshotsLoaded = true;
       console.log('✅ Snapshots do Supabase carregados com sucesso em paralelo');
+      console.log('📊 latestAdrSnapshots após carregamento:', Object.keys(latestAdrSnapshots).map(ticker => ({
+        ticker,
+        hasClosing: !!(latestAdrSnapshots[ticker] && latestAdrSnapshots[ticker].closing),
+        hasAfterHours: !!(latestAdrSnapshots[ticker] && latestAdrSnapshots[ticker].after_hours)
+      })));
     } catch (error) {
       console.warn('⚠️ Erro ao carregar snapshots do Supabase:', error);
       supabaseSnapshotsLoaded = true; // Marcar como carregado para evitar tentativas repetidas
@@ -718,7 +723,13 @@
 
   // Calcula totais de Fechamento usando snapshots salvos (oficial às 17:00 BR)
   function computeFechamentoAt1700Totals(adrs, snapshots, tickers){
-    if (!snapshots) return null;
+    if (!snapshots) {
+      console.log('⚠️ computeFechamentoAt1700Totals: snapshots é null');
+      return null;
+    }
+    
+    console.log('🔍 computeFechamentoAt1700Totals: snapshots disponíveis:', Object.keys(snapshots));
+    
     let pos = 0;
     let neg = 0;
     let hasValue = false;
@@ -729,12 +740,16 @@
 
     tickers.forEach(ticker => {
       const snap = snapshots[ticker];
+      console.log(`🔍 ${ticker}: snap=${!!snap}, closing=${!!(snap && snap.closing)}`);
+      
       if (!snap || !snap.closing) return;
       const closing = snap.closing;
       // Usar variação do fechamento (oficial) já fornecida pelo backend
       const variation = closing.variation;
       if (variation == null || isNaN(variation)) return;
       hasValue = true;
+
+      console.log(`✅ ${ticker} fechamento: ${variation}%`);
 
       // Opcional: validar que o timestamp de closing é do dia (ET). Se não houver timezone claro, usamos o valor como está.
       // Se houver divergência de data, ainda consideramos o snapshot mais recente enviado pelo backend.
@@ -743,6 +758,8 @@
       else if (variation < 0) neg += variation;
     });
 
+    console.log(`📊 computeFechamentoAt1700Totals resultado: pos=${pos}, neg=${neg}, hasValue=${hasValue}`);
+    
     if (!hasValue) return null;
     return { pos, neg, total: pos + neg, dayKey: todayKey };
   }
